@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-brand-50 text-brand-900 font-sans antialiased;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-brand-100;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-brand-300 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-brand-400;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl border border-brand-100 shadow-sm;
+  }
+
+  .card-padded {
+    @apply card p-5;
+  }
+
+  .badge-risk-low {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20;
+  }
+  .badge-risk-medium {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-600/20;
+  }
+  .badge-risk-high {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700 ring-1 ring-red-600/20;
+  }
+  .badge-risk-critical {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-950/10 text-orange-950 ring-1 ring-orange-950/20;
+  }
+
+  .btn-primary {
+    @apply px-4 py-2 bg-brand-700 text-white rounded-lg font-medium text-sm
+           hover:bg-brand-800 active:bg-brand-900
+           transition-colors duration-150
+           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 bg-white text-brand-700 border border-brand-200 rounded-lg font-medium text-sm
+           hover:bg-brand-50 active:bg-brand-100
+           transition-colors duration-150
+           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2;
+  }
+
+  .input-field {
+    @apply w-full px-3 py-2 bg-white border border-brand-200 rounded-lg text-sm
+           placeholder:text-brand-400
+           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500
+           transition-colors duration-150;
+  }
+
+  .select-field {
+    @apply input-field appearance-none bg-no-repeat;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23627d98' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+  }
+
+  /* Stagger animation for cards/rows */
+  .fade-in {
+    animation: fadeIn 0.4s ease-out both;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Pulse for live data indicators */
+  .pulse-dot {
+    @apply relative;
+  }
+  .pulse-dot::before {
+    content: '';
+    @apply absolute -left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-emerald-500;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: translateY(-50%) scale(1); }
+    50% { opacity: 0.5; transform: translateY(-50%) scale(1.5); }
+  }
+}
