@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import auth, dashboard, predictions, students
 from app.core.config import get_settings
+from app.core.database import Base, engine
 from app.ml.predictor import predictor
 
 settings = get_settings()
@@ -17,8 +18,14 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: load ML model. Shutdown: cleanup."""
+    """Startup: create tables and load ML model. Shutdown: cleanup."""
     logger.info("Starting OULAD Analytics API...")
+
+    # Auto-create tables if they don't exist
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("Database tables verified/created")
+
     predictor.load()
     if predictor.is_loaded:
         logger.info("ML model v%s loaded successfully", predictor.version)
