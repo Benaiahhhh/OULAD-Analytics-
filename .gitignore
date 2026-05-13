@@ -23,9 +23,9 @@ frontend/dist/
 *.swp
 *.swo
 
-# ML artifacts
-*.joblib
-model_metadata.json
+# ML artifacts (allow app/ml/ model files for deployment)
+# *.joblib
+# model_metadata.json
 
 # Database
 *.db

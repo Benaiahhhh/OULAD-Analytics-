@@ -18,7 +18,7 @@ export default function FeatureContributionChart({ features, compact = false }) 
   if (!features || features.length === 0) return null;
 
   const data = features.map((f) => ({
-    name: FEATURE_LABELS[f.feature] || f.feature,
+    name: f.label || FEATURE_LABELS[f.feature] || f.feature,
     contribution: f.direction === 'risk' ? f.contribution : -f.contribution,
     direction: f.direction,
     rawValue: f.value,

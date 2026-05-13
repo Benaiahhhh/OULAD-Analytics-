@@ -38,9 +38,10 @@ class RetentionPredictor:
 
         self._loaded = True
         logger.info(
-            "Loaded model v%s from %s",
+            "Loaded model v%s from %s (AUC: %s)",
             self.metadata.get("model_version", "unknown") if self.metadata else "?",
             path,
+            self.metadata.get("test_auc", "?") if self.metadata else "?",
         )
 
     @property
@@ -54,30 +55,16 @@ class RetentionPredictor:
         return settings.ml_model_version
 
     def predict(self, features: dict) -> dict:
-        """
-        Predict dropout risk for a single student.
-
-        Args:
-            features: Dict with keys matching OULAD feature names.
-
-        Returns:
-            Dict with risk_score, risk_level, and feature_contributions.
-        """
         if not self._loaded:
             return self._demo_predict(features)
 
-        df = pd.DataFrame([features])
+        feature_names = self.metadata["feature_names"]
+        row = self._build_feature_row(features, feature_names)
+        df = pd.DataFrame([row], columns=feature_names)
 
-        # Ensure all expected columns exist
-        expected = self.metadata["features"] if self.metadata else []
-        for col in expected:
-            if col not in df.columns:
-                df[col] = np.nan
-
-        risk_score = float(self.model.predict_proba(df[expected])[:, 1][0])
+        risk_score = float(self.model.predict_proba(df)[:, 1][0])
         risk_level = self._score_to_level(risk_score)
-
-        contributions = self._compute_contributions(df[expected])
+        contributions = self._compute_contributions(df, feature_names)
 
         return {
             "risk_score": round(risk_score, 4),
@@ -87,40 +74,99 @@ class RetentionPredictor:
         }
 
     def predict_batch(self, features_list: list[dict]) -> list[dict]:
-        """Predict for multiple students."""
         return [self.predict(f) for f in features_list]
 
-    def _compute_contributions(self, df: pd.DataFrame) -> list[dict]:
-        """Compute per-feature contribution using model coefficients."""
+    def _build_feature_row(self, features: dict, feature_names: list) -> list:
+        row = {}
+
+        # Numeric features — map from DB column names to model feature names
+        numeric_map = {
+            "num_of_prev_attempts": "num_of_prev_attempts",
+            "studied_credits": "studied_credits",
+            "assessment_score_avg": "av_score",
+            "av_score": "av_score",
+            "assessment_score_std": "std_score",
+            "std_score": "std_score",
+            "late_submission_rate": "late_submission_rate",
+            "assessments_submitted": "num_assessments_completed",
+            "num_assessments_completed": "num_assessments_completed",
+            "total_clicks": "total_clicks",
+            "days_active": "active_days",
+            "active_days": "active_days",
+            "early_clicks": "early_clicks",
+        }
+
+        for input_name, model_name in numeric_map.items():
+            if input_name in features and model_name not in row:
+                val = features[input_name]
+                row[model_name] = float(val) if val is not None else 0.0
+
+        for feat in ["num_of_prev_attempts", "studied_credits", "av_score",
+                      "std_score", "late_submission_rate", "num_assessments_completed",
+                      "total_clicks", "active_days", "early_clicks"]:
+            if feat not in row:
+                row[feat] = 0.0
+
+        # Categorical — one-hot encode to match training (drop_first)
+        education = features.get("highest_education", "")
+        for cat in ["HE Qualification", "Lower Than A Level",
+                     "No Formal quals", "Post Graduate Qualification"]:
+            row[f"highest_education_{cat}"] = 1.0 if education == cat else 0.0
+
+        imd = features.get("imd_band", "")
+        for cat in ["10-20", "20-30%", "30-40%", "40-50%", "50-60%",
+                     "60-70%", "70-80%", "80-90%", "90-100%", "?"]:
+            row[f"imd_band_{cat}"] = 1.0 if imd and (imd.replace("%", "") == cat.replace("%", "")) else 0.0
+
+        age = features.get("age_band", "")
+        row["age_band_35-55"] = 1.0 if age == "35-55" else 0.0
+        row["age_band_55<="] = 1.0 if age == "55<=" else 0.0
+
+        disability = features.get("disability", "N")
+        row["disability_Y"] = 1.0 if disability == "Y" else 0.0
+
+        module = features.get("module_code", features.get("code_module", ""))
+        for cat in ["BBB", "CCC", "DDD", "EEE", "FFF", "GGG"]:
+            row[f"code_module_{cat}"] = 1.0 if module == cat else 0.0
+
+        return [row.get(feat, 0.0) for feat in feature_names]
+
+    def _compute_contributions(self, df: pd.DataFrame, feature_names: list) -> list[dict]:
         if not self.metadata or "coefficients" not in self.metadata:
             return []
 
-        coefficients = np.array(self.metadata["coefficients"])
-        feature_names = self.metadata.get("feature_names_transformed", [])
+        coefficients = self.metadata["coefficients"]
 
-        # Transform features through the preprocessor
-        preprocessor = self.model.named_steps["preprocessor"]
-        X_transformed = preprocessor.transform(df)
+        label_map = {
+            "av_score": "Assessment Average",
+            "std_score": "Score Consistency",
+            "late_submission_rate": "Late Submission Rate",
+            "num_assessments_completed": "Assessments Completed",
+            "total_clicks": "Total VLE Clicks",
+            "active_days": "Active Days",
+            "early_clicks": "Early Engagement Clicks",
+            "num_of_prev_attempts": "Previous Attempts",
+            "studied_credits": "Credits Studied",
+        }
 
-        # Element-wise contribution: coefficient * feature_value
-        contributions_raw = coefficients * X_transformed[0]
-
-        # Map back to original feature groups and aggregate
-        numeric_features = self.metadata["features"][:11]  # first 11 are numeric
         results = []
+        for feat in feature_names:
+            coef = coefficients.get(feat, 0)
+            val = float(df[feat].iloc[0])
+            contrib = coef * val
 
-        for i, feat in enumerate(numeric_features):
-            if i < len(contributions_raw):
-                val = float(df.iloc[0].get(feat, 0) or 0)
-                contrib = float(contributions_raw[i])
-                results.append({
-                    "feature": feat,
-                    "value": val,
-                    "contribution": round(abs(contrib), 4),
-                    "direction": "risk" if contrib > 0 else "protective",
-                })
+            if abs(contrib) < 0.001:
+                continue
 
-        # Sort by absolute contribution, return top 10
+            label = label_map.get(feat, feat.replace("_", " ").title())
+            results.append({
+                "feature": feat,
+                "label": label,
+                "value": round(val, 4),
+                "contribution": round(abs(contrib), 4),
+                "direction": "risk" if contrib > 0 else "protective",
+            })
+
         results.sort(key=lambda x: x["contribution"], reverse=True)
         return results[:10]
 
@@ -136,11 +182,9 @@ class RetentionPredictor:
 
     @staticmethod
     def _demo_predict(features: dict) -> dict:
-        """Deterministic demo prediction when no model is loaded."""
-        # Simple heuristic based on key features for demo mode
         score = 0.3
         clicks = features.get("total_clicks", 0)
-        assess = features.get("assessment_score_avg", 50)
+        assess = features.get("assessment_score_avg", features.get("av_score", 50))
         prev_attempts = features.get("num_of_prev_attempts", 0)
 
         if clicks < 100:
@@ -157,15 +201,14 @@ class RetentionPredictor:
             "risk_level": RetentionPredictor._score_to_level(score),
             "model_version": "demo",
             "features": [
-                {"feature": "total_clicks", "value": clicks,
+                {"feature": "total_clicks", "label": "Total VLE Clicks", "value": clicks,
                  "contribution": 0.3, "direction": "risk" if clicks < 100 else "protective"},
-                {"feature": "assessment_score_avg", "value": assess or 0,
+                {"feature": "av_score", "label": "Assessment Average", "value": assess or 0,
                  "contribution": 0.25, "direction": "risk" if (assess or 50) < 40 else "protective"},
-                {"feature": "num_of_prev_attempts", "value": prev_attempts,
+                {"feature": "num_of_prev_attempts", "label": "Previous Attempts", "value": prev_attempts,
                  "contribution": 0.15, "direction": "risk" if prev_attempts > 1 else "protective"},
             ],
         }
 
 
-# Singleton instance — loaded once at startup
 predictor = RetentionPredictor()
