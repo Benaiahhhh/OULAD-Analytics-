@@ -2,11 +2,13 @@
  * API client — handles auth tokens, request/response interceptors, and base URL.
  */
 
-const BASE_URL = '/api/v1';
+const BASE_URL = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api/v1`
+  : '/api/v1';
 
 let accessToken = localStorage.getItem('access_token');
 let refreshToken = localStorage.getItem('refresh_token');
-let onAuthError = null; // set by useAuth to trigger logout
+let onAuthError = null;
 
 export function setTokens(access, refresh) {
   accessToken = access;
@@ -36,7 +38,6 @@ async function request(endpoint, options = {}) {
     ...options.headers,
   };
 
-  // Don't set Content-Type for FormData (login uses OAuth2 form)
   if (!(options.body instanceof URLSearchParams)) {
     headers['Content-Type'] = 'application/json';
   }
@@ -47,7 +48,6 @@ async function request(endpoint, options = {}) {
 
   let response = await fetch(url, { ...options, headers });
 
-  // Try token refresh on 401
   if (response.status === 401 && refreshToken && !endpoint.includes('/auth/')) {
     const refreshed = await tryRefresh();
     if (refreshed) {
