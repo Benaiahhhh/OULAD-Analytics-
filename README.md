@@ -40,6 +40,7 @@ docker compose up --build
 ```
 
 App runs at `http://localhost:3000`, API at `http://localhost:8000/docs`.
+Live web address: https://oulad-analytics-app.onrender.com/
 
 ### Local Development
 
