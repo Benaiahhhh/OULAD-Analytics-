@@ -23,7 +23,7 @@ class RetentionPredictor:
         self._loaded = False
 
     def load(self, model_path: str | None = None) -> None:
-        path = Path(model_path or settings.model_path)
+        path = Path(model_path or settings.ml_model_path)
         meta_path = path.parent / "model_metadata.json"
 
         if not path.exists():
@@ -51,7 +51,7 @@ class RetentionPredictor:
     def version(self) -> str:
         if self.metadata:
             return self.metadata.get("model_version", "unknown")
-        return settings.model_version
+        return settings.ml_model_version
 
     def predict(self, features: dict) -> dict:
         """
